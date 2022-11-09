@@ -1,0 +1,140 @@
+ clear
+ clc
+
+%%%%%Int Data Creation%%%%%
+dataIn =rand(1, 2^14) > 0.5;
+nu = [2,3.5,5];
+nc = [2,4,7];
+freq_carrier = 2000;
+freq_symbol = 200;
+noiseList = [0, 0.7]; %noise level
+errList = zeros(1, numel(noiseList));
+errRate = zeros(1, numel(noiseList));
+SNR = zeros(1, numel(noiseList));
+berc=zeros(1,18);
+z=1;
+PoE=zeros(3,3,2);
+for i=1: numel(noiseList)
+    for j=1: numel(nc)
+        for k=1: numel(nu)
+            for a=1: 6
+            noise = noiseList(i);
+            %nc=5;
+            %nu=7;
+            %dor= (3*nc)^(1/2);
+            %rod= dor^(-1);
+            %loss = rod^(nu/2);
+            dor= (3*nc(j))^(1/2);
+            rod= dor^(-1);
+            loss = rod^(nu(k)/2);
+            phase=10+(90-10)*rand(1)*(pi/180);
+            %%%%%% Int MODEM PART %%%%%%%%%
+            dC = numel(dataIn);
+            %In qpsk number of points that are represented by the 2 bit points
+            SR = 16 * freq_carrier;
+            nSample = floor(dC/2*SR/freq_symbol);
+            ddt=1/SR;
+            
+            %%%%%%%%% Int Signal Portion %%%%%%%%%
+            
+            dataPol = dataIn*2-1;
+            t=(0:1:nSample-1)*ddt;
+            qpsk=zeros(1,nSample);
+            for kk=1:nSample
+            pp = floor(t(kk)*freq_symbol)*2+1;
+            qpsk(kk)=loss*((dataPol(pp)*cos(2*pi*freq_carrier*t(kk)+phase)+dataPol(pp+1)*sin(2*pi*freq_carrier*t(kk)+phase))/sqrt(2));
+            end
+
+           Receive = qpsk+randn(1,nSample)*noise;
+
+            if a == 1
+                dint1=Receive;
+            end
+            if a == 2
+                dint2=Receive;
+            end
+            if a == 3
+                dint3=Receive;
+            end
+            if a == 4
+                dint4=Receive;
+            end
+            if a == 5
+                dint5=Receive;
+            end
+            if a == 6
+                dint6=Receive;
+            end
+            
+            end
+            dint=dint1+dint2+dint3+dint4+dint5+dint6;
+            
+            %%%%Signal Creation%%%%%
+
+
+dataIn =rand(1, 2^14) > 0.5;
+
+            
+            %%%%%% Int MODEM PART %%%%%%%%%
+            dC = numel(dataIn);
+            %In qpsk number of points that are represented by the 2 bit points
+            SR = 16 * freq_carrier;
+            nSample = floor(dC/2*SR/freq_symbol);
+            ddt=1/SR;
+            
+            %%%%%%%%% Int Signal Portion %%%%%%%%%
+            
+            dataPol = dataIn*2-1;
+            t=(0:1:nSample-1)*ddt;
+            qpsk=zeros(1,nSample);
+            for kk=1:nSample
+            pp = floor(t(kk)*freq_symbol)*2+1;
+            qpsk(kk)=(dataPol(pp)*cos(2*pi*freq_carrier*t(kk))+dataPol(pp+1)*sin(2*pi*freq_carrier*t(kk)))/sqrt(2);
+            end
+
+            Receive = qpsk+randn(1,nSample)*noise;
+
+            sigcombined=Receive+dint;
+
+            %Demodulation of Message%
+            
+            [bb,aa]=butter(15, .2);
+            m1D= sigcombined*2.*cos(2*pi*freq_carrier*t); %why 2? 
+            m2D= sigcombined*2.*sin(2*pi*freq_carrier*t);   
+            message1=filtfilt(bb, aa, m1D);
+            message2=filtfilt(bb,aa, m2D);
+
+            mmu=0;
+            ap=floor(SR/freq_symbol/2);%creates the width of the half pulse 
+            dataOut = zeros(1,dC);
+            Ichannel = zeros(1,dC/2);
+            Qchannel = zeros(1,dC/2);
+            for jy=1:dC/2
+                mmu=mmu+1;
+                ky=ap+(jy-1)*2*ap;
+                dataOut(mmu) = (message1(ky)>0);
+                Ichannel(jy) = message1(ky);
+                
+                mmu=mmu+1;
+               dataOut(mmu) = message2(ky)>0;
+               Qchannel(jy) = message2(ky);
+        
+            end
+
+  
+            BEC = sum(abs(dataIn-dataOut));
+            berc(z) = BEC;
+            errRate(z)=berc(z)/numel(dataIn)*100;
+            z=z+1;
+
+            if i==1 && j== 2 && k==2
+                plot(Ichannel, Qchannel, '*')
+            end
+        end
+    end
+end
+
+PoE=reshape(errRate, [3,3,2]);
+
+n0=PoE(:,:,1)
+np7=PoE(:,:,2)
